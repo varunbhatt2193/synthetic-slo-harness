@@ -1,0 +1,139 @@
+{
+  "rules": [
+    {
+      "uid": "slo-fast-burn",
+      "title": "SLO fast burn — cron probes",
+      "ruleGroup": "slo-burn",
+      "folderUID": "__FOLDER_UID__",
+      "condition": "B",
+      "for": "0s",
+      "noDataState": "OK",
+      "execErrState": "Error",
+      "labels": { "severity": "page", "slo": "probe-availability-99" },
+      "annotations": {
+        "summary": "Fast error-budget burn for target {{ $labels.target }}: 1h burn rate {{ $values.B }}x (threshold 14.4x, gated by the 30m window)",
+        "runbook": "https://github.com/varunbhatt2193/synthetic-slo-harness/blob/main/grafana/README.md"
+      },
+      "data": [
+        {
+          "refId": "A",
+          "relativeTimeRange": { "from": 21600, "to": 0 },
+          "datasourceUid": "__PROM_DS_UID__",
+          "model": {
+            "refId": "A",
+            "instant": true,
+            "expr": "((1 - avg by (target) (avg_over_time(synthetic_probe_success{source=\"cron\"}[1h]))) / 0.01) and ((1 - avg by (target) (avg_over_time(synthetic_probe_success{source=\"cron\"}[30m]))) / 0.01 > 14.4)"
+          }
+        },
+        {
+          "refId": "B",
+          "relativeTimeRange": { "from": 0, "to": 0 },
+          "datasourceUid": "__expr__",
+          "model": {
+            "refId": "B",
+            "type": "threshold",
+            "expression": "A",
+            "conditions": [
+              {
+                "evaluator": { "type": "gt", "params": [14.4] },
+                "operator": { "type": "and" },
+                "query": { "params": ["A"] },
+                "reducer": { "type": "last" }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "uid": "slo-slow-burn",
+      "title": "SLO slow burn — cron probes",
+      "ruleGroup": "slo-burn",
+      "folderUID": "__FOLDER_UID__",
+      "condition": "B",
+      "for": "0s",
+      "noDataState": "OK",
+      "execErrState": "Error",
+      "labels": { "severity": "ticket", "slo": "probe-availability-99" },
+      "annotations": {
+        "summary": "Slow error-budget burn for target {{ $labels.target }}: 6h burn rate {{ $values.B }}x (threshold 6x, gated by the 3h window)",
+        "runbook": "https://github.com/varunbhatt2193/synthetic-slo-harness/blob/main/grafana/README.md"
+      },
+      "data": [
+        {
+          "refId": "A",
+          "relativeTimeRange": { "from": 43200, "to": 0 },
+          "datasourceUid": "__PROM_DS_UID__",
+          "model": {
+            "refId": "A",
+            "instant": true,
+            "expr": "((1 - avg by (target) (avg_over_time(synthetic_probe_success{source=\"cron\"}[6h]))) / 0.01) and ((1 - avg by (target) (avg_over_time(synthetic_probe_success{source=\"cron\"}[3h]))) / 0.01 > 6)"
+          }
+        },
+        {
+          "refId": "B",
+          "relativeTimeRange": { "from": 0, "to": 0 },
+          "datasourceUid": "__expr__",
+          "model": {
+            "refId": "B",
+            "type": "threshold",
+            "expression": "A",
+            "conditions": [
+              {
+                "evaluator": { "type": "gt", "params": [6] },
+                "operator": { "type": "and" },
+                "query": { "params": ["A"] },
+                "reducer": { "type": "last" }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "uid": "fault-eval-burn",
+      "title": "SLO burn — fault-eval target",
+      "ruleGroup": "slo-burn",
+      "folderUID": "__FOLDER_UID__",
+      "condition": "B",
+      "for": "0s",
+      "noDataState": "OK",
+      "execErrState": "OK",
+      "labels": { "severity": "page", "slo": "probe-availability-99", "scope": "fault-eval" },
+      "annotations": {
+        "summary": "Fault-eval probes burning error budget: 5m burn rate {{ $values.B }}x (threshold 14.4x, gated by the 2m window). Expected during an injected fault window.",
+        "runbook": "https://github.com/varunbhatt2193/synthetic-slo-harness/blob/main/grafana/README.md"
+      },
+      "data": [
+        {
+          "refId": "A",
+          "relativeTimeRange": { "from": 900, "to": 0 },
+          "datasourceUid": "__PROM_DS_UID__",
+          "model": {
+            "refId": "A",
+            "instant": true,
+            "expr": "((1 - avg by (target) (avg_over_time(synthetic_probe_success{target=\"fault-eval\"}[5m]))) / 0.01) and ((1 - avg by (target) (avg_over_time(synthetic_probe_success{target=\"fault-eval\"}[2m]))) / 0.01 > 14.4)"
+          }
+        },
+        {
+          "refId": "B",
+          "relativeTimeRange": { "from": 0, "to": 0 },
+          "datasourceUid": "__expr__",
+          "model": {
+            "refId": "B",
+            "type": "threshold",
+            "expression": "A",
+            "conditions": [
+              {
+                "evaluator": { "type": "gt", "params": [14.4] },
+                "operator": { "type": "and" },
+                "query": { "params": ["A"] },
+                "reducer": { "type": "last" }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -23,7 +23,25 @@ retention; this project uses a few dozen series.
 Smoke test: run the **probe** workflow manually (Actions → probe → Run workflow), then in
 Grafana Explore query `synthetic_probe_success`.
 
-## 2. Alert webhook → GitHub issues
+## 2. Dashboard + alert rules (one command)
+
+The dashboard and the three burn-rate alert rules live in this repo as code
+(`grafana/`, thresholds documented and frozen in [grafana/README.md](../grafana/README.md)).
+To apply them:
+
+1. In your Grafana stack: Administration → Users and access → Service accounts → new service
+   account with **Admin** role → add a token.
+2. Run:
+
+```bash
+GRAFANA_URL=https://<stack>.grafana.net GRAFANA_SA_TOKEN=<token> \
+    uv run python scripts/provision_grafana.py
+```
+
+Idempotent — rules have fixed UIDs, so re-running after a reviewed threshold change updates
+in place.
+
+## 3. Alert webhook → GitHub issues
 
 `alert-issues.yml` listens for a `repository_dispatch` event with type `grafana-alert`.
 GitHub requires that request body to be exactly `{"event_type": ..., "client_payload": ...}`,
@@ -53,7 +71,7 @@ current Grafana Cloud alerting):
 
 3. Point the notification policy for this project's alert rules at that contact point.
 
-## 3. Alert-level MTTD scoring (optional, used by fault-eval)
+## 4. Alert-level MTTD scoring (optional, used by fault-eval)
 
 `faults/score.py` can also fetch alert-state annotations to score when alerts actually
 fired. Add two more repo secrets:
@@ -65,7 +83,7 @@ fired. Add two more repo secrets:
 
 Without them, fault-eval still runs and scores probe-level detection only.
 
-## 4. Repository settings
+## 5. Repository settings
 
 - `git config core.hooksPath .githooks` after cloning (author-identity guard).
 - Actions → General → Workflow permissions: read-only is fine (`alert-issues.yml` and

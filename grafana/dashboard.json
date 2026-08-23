@@ -1,0 +1,221 @@
+{
+  "uid": "synthetic-slo",
+  "title": "Synthetic SLO Harness",
+  "tags": ["synthetic-monitoring", "slo"],
+  "timezone": "utc",
+  "schemaVersion": 39,
+  "refresh": "5m",
+  "time": { "from": "now-24h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Availability (24h)",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "__PROM_DS_UID__" },
+      "targets": [
+        {
+          "refId": "A",
+          "instant": true,
+          "expr": "avg by (target) (avg_over_time(synthetic_probe_success{source=\"cron\"}[24h]))",
+          "legendFormat": "{{target}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 0.99 },
+              { "color": "green", "value": 0.999 }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "type": "gauge",
+      "title": "Error budget remaining (30d, SLO 99%)",
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "__PROM_DS_UID__" },
+      "targets": [
+        {
+          "refId": "A",
+          "instant": true,
+          "expr": "clamp_min(1 - (1 - avg by (target) (avg_over_time(synthetic_probe_success{source=\"cron\"}[30d]))) / 0.01, 0)",
+          "legendFormat": "{{target}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 0.25 },
+              { "color": "green", "value": 0.5 }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Minutes since last cron probe",
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "__PROM_DS_UID__" },
+      "targets": [
+        {
+          "refId": "A",
+          "instant": true,
+          "expr": "(time() - max(timestamp(synthetic_probe_success{source=\"cron\"}))) / 60",
+          "legendFormat": "staleness"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "m",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 30 },
+              { "color": "red", "value": 60 }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Cron jitter (scheduler + queue delay)",
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "__PROM_DS_UID__" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "synthetic_cron_jitter_seconds",
+          "legendFormat": "per run"
+        },
+        {
+          "refId": "B",
+          "expr": "quantile_over_time(0.95, synthetic_cron_jitter_seconds[24h])",
+          "legendFormat": "p95 (24h)"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Burn rate (SLO 99%) — alert thresholds 14.4x fast / 6x slow",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "datasource": { "type": "prometheus", "uid": "__PROM_DS_UID__" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(1 - avg by (target) (avg_over_time(synthetic_probe_success{source=\"cron\"}[1h]))) / 0.01",
+          "legendFormat": "{{target}} 1h"
+        },
+        {
+          "refId": "B",
+          "expr": "(1 - avg by (target) (avg_over_time(synthetic_probe_success{source=\"cron\"}[6h]))) / 0.01",
+          "legendFormat": "{{target}} 6h"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": { "drawStyle": "line", "spanNulls": true },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 6 },
+              { "color": "red", "value": 14.4 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "tooltip": { "mode": "multi" } }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Availability (1h rolling)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "datasource": { "type": "prometheus", "uid": "__PROM_DS_UID__" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "avg by (target) (avg_over_time(synthetic_probe_success{source=\"cron\"}[1h]))",
+          "legendFormat": "{{target}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "custom": { "drawStyle": "line", "spanNulls": true }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Probe duration p50 / p95 (6h window)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+      "datasource": { "type": "prometheus", "uid": "__PROM_DS_UID__" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "quantile_over_time(0.5, synthetic_probe_duration_seconds{source=\"cron\"}[6h])",
+          "legendFormat": "{{target}} p50"
+        },
+        {
+          "refId": "B",
+          "expr": "quantile_over_time(0.95, synthetic_probe_duration_seconds{source=\"cron\"}[6h])",
+          "legendFormat": "{{target}} p95"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s", "custom": { "drawStyle": "line", "spanNulls": true } },
+        "overrides": []
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Journey step durations (saucedemo)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
+      "datasource": { "type": "prometheus", "uid": "__PROM_DS_UID__" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "synthetic_journey_step_duration_seconds{source=\"cron\", target=\"saucedemo\"}",
+          "legendFormat": "{{step}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s", "custom": { "drawStyle": "line", "spanNulls": true } },
+        "overrides": []
+      }
+    }
+  ]
+}
