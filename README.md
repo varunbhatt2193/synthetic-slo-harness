@@ -1,5 +1,10 @@
 # synthetic-slo-harness
 
+**In plain English:** scripted "robot users" visit a web app and an API every 15 minutes,
+report health to live dashboards, and raise an alarm when things degrade. Then — the part
+that makes this a project — the harness **breaks the app on purpose, on a schedule**, to
+measure whether the alarms fire, how fast, and how often they cry wolf.
+
 > Synthetic monitoring built from the tools an SDET already owns — Playwright journeys and API
 > probes scheduled by GitHub Actions, feeding Grafana Cloud SLO dashboards — and then the part
 > monitoring vendors don't publish: **the monitoring itself gets tested.** Faults are injected
@@ -8,6 +13,37 @@
 **Status: scaffolded.** Probes, metrics pipeline, fault injection and scoring are built,
 unit-tested, and green in CI. Quiet-week baseline collection and the first scored fault runs
 are next. **No measured numbers are claimed yet.**
+
+## What is being monitored?
+
+This is a **portfolio project** — there is no company behind it, and that is by design. The
+system under evaluation here is *the monitoring itself*, so the monitored applications are
+deliberately simple and fully controlled:
+
+| role | application | why this one |
+|---|---|---|
+| Continuous target (browser) | [saucedemo.com](https://www.saucedemo.com) — SauceLabs' public practice storefront | stands in for "your production web app": a real login → cart → checkout flow, probed the way Checkly probes a customer's site |
+| Continuous target (API) | [githubstatus.com](https://www.githubstatus.com) status API | stands in for "your production API": a public, stable endpoint probed at a polite cadence |
+| Fault-injection target | a **toy payments API** (FastAPI + Postgres, in this repo) | written specifically to be broken: the harness cuts its DB, ramps its latency, and takes it down **on a known schedule** — which is what makes detection scorable against ground truth |
+
+In other words: the demo apps play the part of the product; the engineering being
+demonstrated is everything wrapped around them. Swap `targets.yml` to point at a real
+application and the same harness monitors that instead.
+
+## What this project demonstrates
+
+- **Test engineering discipline** — every claim is measured against injected ground truth:
+  known fault timelines, a detection rule frozen before scoring, raw data published so every
+  number is recomputable. Same method as my
+  [pytest-ai-triage](https://github.com/varunbhatt2193/pytest-ai-triage) project.
+- **Hands-on GitHub Actions, as the product** — cron scheduling, matrix fan-out, reusable
+  workflows (`workflow_call`), a composite action, service containers, concurrency groups,
+  caching, artifacts, job summaries, `repository_dispatch` issue automation.
+- **Observability / SRE vocabulary with evidence attached** — Prometheus remote_write (the
+  wire protocol, hand-implemented and unit-tested), Grafana Cloud, SLOs, error budgets,
+  multiwindow burn-rate alerting, MTTD, alert precision/recall.
+- **Playwright beyond test suites** — browser journeys as production probes, the pattern
+  behind Checkly and Grafana Synthetic Monitoring's browser checks.
 
 ## The idea in three sentences
 
