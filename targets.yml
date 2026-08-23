@@ -1,0 +1,21 @@
+# Continuous probe targets. Cadence is one probe run per target per 15 minutes — a deliberately
+# polite load on third-party demo sites (single journey, no parallel hammering).
+targets:
+  # SauceLabs' public automation-practice storefront — the browser journey target.
+  - name: saucedemo
+    kind: journey
+    url: https://www.saucedemo.com
+    journey: saucedemo_checkout
+
+  # Public status API — the plain HTTP probe target.
+  - name: githubstatus
+    kind: api
+    url: https://www.githubstatus.com/api/v2/status.json
+    expect_status: 200
+    expect_json_key: status
+
+  # This project's own GitHub Pages status page — enabled once Pages is live.
+  # - name: status-page
+  #   kind: api
+  #   url: https://varunbhatt2193.github.io/synthetic-slo-harness/
+  #   expect_status: 200

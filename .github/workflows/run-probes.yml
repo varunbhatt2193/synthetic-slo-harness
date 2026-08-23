@@ -1,0 +1,56 @@
+# Reusable probe runner (workflow_call): fans out over targets × probe kinds and runs the
+# playwright-synthetic-probe composite action for each. Called by probe.yml on cron/dispatch;
+# any future caller (e.g. a status-page refresh workflow) gets the identical probe behavior.
+name: run-probes
+
+on:
+  workflow_call:
+    inputs:
+      source:
+        description: "source label for pushed metrics"
+        type: string
+        default: "cron"
+    secrets:
+      GRAFANA_PUSH_URL:
+        required: false
+      GRAFANA_PUSH_USER:
+        required: false
+      GRAFANA_PUSH_TOKEN:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: saucedemo
+            kind: journey
+          - target: githubstatus
+            kind: api
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run synthetic probe
+        uses: ./.github/actions/playwright-synthetic-probe
+        with:
+          target: ${{ matrix.target }}
+          kind: ${{ matrix.kind }}
+          source: ${{ inputs.source }}
+          push-url: ${{ secrets.GRAFANA_PUSH_URL }}
+          push-user: ${{ secrets.GRAFANA_PUSH_USER }}
+          push-token: ${{ secrets.GRAFANA_PUSH_TOKEN }}
+
+      - name: Upload traces on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: traces-${{ matrix.target }}-${{ github.run_id }}
+          path: test-results/
+          retention-days: 7
+          if-no-files-found: ignore

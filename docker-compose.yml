@@ -1,0 +1,36 @@
+# Local mirror of the fault-eval service-container stack (fault-eval.yml runs the same
+# topology inside a GitHub Actions job). Bring it up, then:
+#   python faults/inject.py --fault error_burst --baseline-min 1 --fault-min 1 --recovery-min 1 &
+#   python faults/probe_loop.py --duration-min 3 --interval-s 10
+#   python faults/score.py
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: payments
+      POSTGRES_USER: payments
+      POSTGRES_PASSWORD: payments
+
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:2.9.0
+    ports:
+      - "8474:8474"   # admin API
+      - "8080:8080"   # "front" proxy: probes -> API
+      - "5433:5433"   # "db" proxy: API -> postgres
+
+  api:
+    build:
+      context: .
+      dockerfile: service/Dockerfile
+    environment:
+      DB_HOST: toxiproxy
+      DB_PORT: "5433"
+      DB_NAME: payments
+      DB_USER: payments
+      DB_PASSWORD: payments
+    ports:
+      - "8001:8000"   # direct access, for debugging beside the proxied :8080 path
+                      # (host 8001: 8000 tends to be taken on dev machines)
+    depends_on:
+      - postgres
+      - toxiproxy

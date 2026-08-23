@@ -1,0 +1,77 @@
+# Alert → issue automation. A Grafana alert webhook (contact point with a custom payload
+# template — see docs/setup-grafana.md) POSTs a repository_dispatch event here; firing alerts
+# open a labeled issue, resolved alerts close it. The issue trail doubles as the alert log the
+# scorer and the quiet-week false-positive count can be audited against.
+name: alert-issues
+
+on:
+  repository_dispatch:
+    types: [grafana-alert]
+
+permissions:
+  issues: write
+
+jobs:
+  handle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const p = context.payload.client_payload ?? {};
+            const status = (p.status ?? "unknown").toLowerCase();        // firing | resolved
+            const alertname = p.alertname ?? "unnamed-alert";
+            const summary = p.summary ?? "";
+            const fingerprint = p.fingerprint ?? alertname;
+            const marker = `<!-- slo-alert:${fingerprint} -->`;
+
+            const { data: open } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open",
+              labels: "slo-alert",
+              per_page: 100,
+            });
+            const existing = open.find(issue => issue.body?.includes(marker));
+
+            if (status === "firing") {
+              if (existing) {
+                core.info(`already open: #${existing.number}`);
+                return;
+              }
+              const { data: issue } = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: `[slo-alert] ${alertname} is firing`,
+                labels: ["slo-alert"],
+                body: [
+                  marker,
+                  `**Alert:** ${alertname}`,
+                  `**Status:** firing`,
+                  summary ? `**Summary:** ${summary}` : "",
+                  "",
+                  `Raw payload:`,
+                  "```json",
+                  JSON.stringify(p, null, 2),
+                  "```",
+                ].filter(Boolean).join("\n"),
+              });
+              core.info(`opened #${issue.number}`);
+            } else if (status === "resolved" && existing) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body: `Alert **${alertname}** resolved — closing automatically.`,
+              });
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                state: "closed",
+                state_reason: "completed",
+              });
+              core.info(`closed #${existing.number}`);
+            } else {
+              core.info(`nothing to do (status=${status}, existing=${!!existing})`);
+            }

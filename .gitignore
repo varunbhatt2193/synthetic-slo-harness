@@ -1,0 +1,18 @@
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+dist/
+test-results/
+playwright-report/
+probe-results/
+*.egg-info/
+.env
+
+# local fault-eval run outputs (published runs keep these as workflow artifacts)
+timeline.json
+probe_records.jsonl
+scorecard.md
+inject.log
+

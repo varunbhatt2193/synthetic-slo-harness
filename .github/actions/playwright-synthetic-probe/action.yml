@@ -1,0 +1,88 @@
+name: "Playwright Synthetic Probe"
+description: >-
+  Run one synthetic probe — a Playwright browser journey or an HTTP API check — against a named
+  target and push availability, latency and per-step timing metrics to a Prometheus remote_write
+  endpoint (e.g. Grafana Cloud). Destined for its own repo + Marketplace listing once stable.
+inputs:
+  target:
+    description: "Target name from targets.yml"
+    required: true
+  kind:
+    description: "Probe kind: journey | api"
+    required: true
+  source:
+    description: "Value for the metric 'source' label (cron | manual | fault-eval | local)"
+    required: false
+    default: "cron"
+  push-url:
+    description: "Prometheus remote_write URL (empty = record JSONL only, skip push)"
+    required: false
+    default: ""
+  push-user:
+    description: "remote_write basic-auth username (Grafana Cloud: metrics instance ID)"
+    required: false
+    default: ""
+  push-token:
+    description: "remote_write basic-auth password (Grafana Cloud: access policy token)"
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: Set up uv
+      uses: astral-sh/setup-uv@v5
+      with:
+        enable-cache: true
+
+    - name: Install dependencies
+      shell: bash
+      run: uv sync --frozen
+
+    - name: Cache Playwright browsers
+      if: inputs.kind == 'journey'
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+
+    - name: Install Chromium
+      if: inputs.kind == 'journey'
+      shell: bash
+      run: uv run playwright install --with-deps chromium
+
+    - name: Run probe
+      shell: bash
+      env:
+        PROBE_SOURCE: ${{ inputs.source }}
+        GRAFANA_PUSH_URL: ${{ inputs.push-url }}
+        GRAFANA_PUSH_USER: ${{ inputs.push-user }}
+        GRAFANA_PUSH_TOKEN: ${{ inputs.push-token }}
+      run: |
+        if [ "${{ inputs.kind }}" = "journey" ]; then
+          uv run pytest probes/journeys --target "${{ inputs.target }}" \
+            --browser chromium --tracing retain-on-failure -q
+        else
+          uv run pytest probes/api --target "${{ inputs.target }}" -q
+        fi
+
+    - name: Per-run scorecard
+      if: always()
+      shell: bash
+      run: |
+        {
+          echo "### Probe: ${{ inputs.target }} (${{ inputs.kind }}, source=${{ inputs.source }})"
+          echo ""
+          if [ -f probe-results/points.jsonl ]; then
+            echo '| metric | labels | value |'
+            echo '|---|---|---|'
+            uv run python - <<'EOF'
+        import json
+        for line in open("probe-results/points.jsonl"):
+            p = json.loads(line)
+            labels = ", ".join(f"{k}={v}" for k, v in sorted(p["labels"].items()) if k != "source")
+            print(f"| {p['name']} | {labels} | {p['value']:.3f} |")
+        EOF
+          else
+            echo "_no probe results were recorded_"
+          fi
+        } >> "$GITHUB_STEP_SUMMARY"

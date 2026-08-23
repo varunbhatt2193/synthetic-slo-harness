@@ -1,0 +1,144 @@
+# Fault evaluation: the whole target stack (toy payments API + Toxiproxy + Postgres) runs as
+# service containers *inside this job* — nothing deployed, nothing paid for. A fault is injected
+# on a known timeline while a tight probe loop watches through the front proxy; the run ends with
+# an MTTD / precision scorecard in the job summary, scored against that ground-truth timeline.
+name: fault-eval
+
+on:
+  workflow_dispatch:
+    inputs:
+      fault_type:
+        description: "Fault class to inject"
+        type: choice
+        required: true
+        options: [latency_ramp, error_burst, hard_outage]
+      baseline_minutes:
+        description: "Quiet minutes before the fault"
+        type: string
+        default: "5"
+      fault_minutes:
+        description: "Fault duration in minutes"
+        type: string
+        default: "10"
+      recovery_minutes:
+        description: "Quiet minutes after the fault"
+        type: string
+        default: "5"
+
+concurrency:
+  group: fault-eval
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: payments
+          POSTGRES_USER: payments
+          POSTGRES_PASSWORD: payments
+      toxiproxy:
+        image: ghcr.io/shopify/toxiproxy:2.9.0
+        ports:
+          - 8474:8474 # admin API
+          - 8080:8080 # "front" proxy: probe loop -> API
+          - 5433:5433 # "db" proxy: API -> postgres
+      api:
+        image: ghcr.io/${{ github.repository }}/api:latest
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          DB_HOST: toxiproxy
+          DB_PORT: "5433"
+          DB_NAME: payments
+          DB_USER: payments
+          DB_PASSWORD: payments
+        ports:
+          - 8000:8000
+    steps:
+      - uses: actions/checkout@v4
+
+      # The API's schema-retry window is 60 s from container start, and it connects through the
+      # db proxy — so the proxies must exist before anything else. curl, not uv: no setup yet.
+      - name: Create Toxiproxy proxies
+        run: |
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:8474/version && break
+            sleep 1
+          done
+          curl -sf -X POST http://localhost:8474/proxies \
+            -d '{"name":"front","listen":"0.0.0.0:8080","upstream":"api:8000","enabled":true}' || true
+          curl -sf -X POST http://localhost:8474/proxies \
+            -d '{"name":"db","listen":"0.0.0.0:5433","upstream":"postgres:5432","enabled":true}' || true
+
+      # Checkout + proxy creation may have eaten into the API's retry window; a restart gives it
+      # a fresh 60 s with the db proxy already in place.
+      - name: Restart API with proxies in place
+        run: docker restart ${{ job.services.api.id }}
+
+      - name: Wait for healthy stack (through the front proxy)
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:8080/health/deep; then echo; echo "stack healthy"; exit 0; fi
+            sleep 2
+          done
+          echo "stack never became healthy"; docker logs ${{ job.services.api.id }}; exit 1
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Run fault timeline + probe loop
+        env:
+          GRAFANA_PUSH_URL: ${{ secrets.GRAFANA_PUSH_URL }}
+          GRAFANA_PUSH_USER: ${{ secrets.GRAFANA_PUSH_USER }}
+          GRAFANA_PUSH_TOKEN: ${{ secrets.GRAFANA_PUSH_TOKEN }}
+          PROBE_SOURCE: fault-eval
+        run: |
+          TOTAL_MIN=$(uv run python -c "print(${{ inputs.baseline_minutes }} + ${{ inputs.fault_minutes }} + ${{ inputs.recovery_minutes }} + 1)")
+          uv run python faults/inject.py \
+            --fault "${{ inputs.fault_type }}" \
+            --baseline-min "${{ inputs.baseline_minutes }}" \
+            --fault-min "${{ inputs.fault_minutes }}" \
+            --recovery-min "${{ inputs.recovery_minutes }}" \
+            --out timeline.json &
+          INJECT_PID=$!
+          uv run python faults/probe_loop.py \
+            --url http://localhost:8080 \
+            --interval-s 20 \
+            --duration-min "$TOTAL_MIN" \
+            --out probe_records.jsonl
+          wait "$INJECT_PID"
+
+      - name: Score against ground truth
+        env:
+          GRAFANA_URL: ${{ secrets.GRAFANA_URL }}
+          GRAFANA_API_TOKEN: ${{ secrets.GRAFANA_API_TOKEN }}
+        run: |
+          uv run python faults/score.py \
+            --timeline timeline.json \
+            --records probe_records.jsonl \
+            --out scorecard.md
+
+      - name: Publish raw evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fault-eval-${{ inputs.fault_type }}-${{ github.run_id }}
+          path: |
+            timeline.json
+            probe_records.jsonl
+            scorecard.md
+          if-no-files-found: warn

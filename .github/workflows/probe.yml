@@ -1,0 +1,24 @@
+# The scheduler. GHA cron is best-effort — the actual firing delay is itself a measured
+# metric (synthetic_cron_jitter_seconds) and sets the floor on detection time; see README.
+name: probe
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+# Never let a slow run overlap the next tick; queue instead of cancel so gaps in the
+# availability series mean "target was slow", not "we discarded the run".
+concurrency:
+  group: synthetic-probes
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  probes:
+    uses: ./.github/workflows/run-probes.yml
+    with:
+      source: ${{ github.event_name == 'schedule' && 'cron' || 'manual' }}
+    secrets: inherit

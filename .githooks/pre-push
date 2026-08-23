@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+#
+# Refuse to push anything that would not be credited to varunbhatt2193.
+#
+# Two different things go wrong on this machine, and only one of them is loud:
+#
+#   1. The active `gh` account drifts (it has flipped to shobhnasharma744 three times in one day).
+#      `gh` is the git credential helper, so the push just fails with a 403. Annoying, self-evident.
+#
+#   2. A commit is authored with an email GitHub links to a *different* account. The push succeeds —
+#      the credentials are fine — and every commit is silently credited elsewhere. This is what
+#      happened to the first 16 commits here: the repo was owned by varunbhatt2193 and the whole
+#      history was credited to bhattvarunk. Nothing failed. It was found by eye, days later.
+#
+# GitHub cannot catch (2) for you: it does not require a commit's author email to belong to the
+# account pushing it. So it gets caught here, before the push leaves the machine.
+#
+# Install:  git config core.hooksPath .githooks
+# Bypass:   git push --no-verify   (deliberately possible; don't make it a habit)
+
+set -uo pipefail
+
+EXPECTED_EMAIL="${TRIAGE_PUSH_EMAIL:-312339765+varunbhatt2193@users.noreply.github.com}"
+EXPECTED_ACCOUNT="${TRIAGE_PUSH_ACCOUNT:-varunbhatt2193}"
+ZERO='0000000000000000000000000000000000000000'
+
+fail() {
+    echo "" >&2
+    echo "  PUSH BLOCKED — $1" >&2
+    shift
+    for line in "$@"; do echo "  $line" >&2; done
+    echo "" >&2
+    exit 1
+}
+
+# ---------------------------------------------------------------- active gh account
+
+if command -v gh >/dev/null 2>&1; then
+    active="$(gh api user -q .login 2>/dev/null || true)"
+    if [ -n "$active" ] && [ "$active" != "$EXPECTED_ACCOUNT" ]; then
+        fail "the active gh account is '$active', not '$EXPECTED_ACCOUNT'." \
+             "gh is the credential helper, so this push would go out as the wrong user." \
+             "" \
+             "  gh auth switch --user $EXPECTED_ACCOUNT"
+    fi
+fi
+
+# ---------------------------------------------------------------- commit authorship
+
+# stdin: <local ref> <local sha> <remote ref> <remote sha>
+while read -r _local_ref local_sha _remote_ref remote_sha; do
+    [ "$local_sha" = "$ZERO" ] && continue          # branch deletion, nothing to inspect
+
+    if [ "$remote_sha" = "$ZERO" ]; then
+        # New ref: everything on it that the remote does not already have.
+        range=$(git rev-list "$local_sha" --not --remotes=origin)
+    else
+        range=$(git rev-list "${remote_sha}..${local_sha}")
+    fi
+    [ -z "$range" ] && continue
+
+    bad=$(
+        git show --no-patch --format='%H %ae %ce' $range 2>/dev/null |
+        while read -r sha ae ce; do
+            if [ "$ae" != "$EXPECTED_EMAIL" ] || [ "$ce" != "$EXPECTED_EMAIL" ]; then
+                echo "    ${sha:0:9}  author=$ae  committer=$ce"
+            fi
+        done
+    )
+
+    if [ -n "$bad" ]; then
+        fail "these commits would not be credited to $EXPECTED_ACCOUNT:" \
+             "$bad" \
+             "" \
+             "  expected both to be: $EXPECTED_EMAIL" \
+             "" \
+             "  Fix the local identity, then rewrite the offending commits:" \
+             "    git config user.email '$EXPECTED_EMAIL'" \
+             "    git rebase -r --exec 'git commit --amend --no-edit --reset-author' <base>" \
+             "" \
+             "  Verify afterwards — UNLINKED or another login means it is still wrong:" \
+             "    gh api repos/$EXPECTED_ACCOUNT/pytest-ai-triage/commits --jq '.[].author.login'"
+    fi
+done
+
+exit 0
