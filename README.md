@@ -1,5 +1,10 @@
 # synthetic-slo-harness
 
+[![ci](https://github.com/varunbhatt2193/synthetic-slo-harness/actions/workflows/ci.yml/badge.svg)](https://github.com/varunbhatt2193/synthetic-slo-harness/actions/workflows/ci.yml)
+[![probe](https://github.com/varunbhatt2193/synthetic-slo-harness/actions/workflows/probe.yml/badge.svg)](https://github.com/varunbhatt2193/synthetic-slo-harness/actions/workflows/probe.yml)
+
+`Playwright` · `Python` · `pytest` · `GitHub Actions` · `Docker` · `Prometheus` · `Grafana` · `SLOs / burn-rate alerting` · `Toxiproxy` · `httpx` · `FastAPI`
+
 **In plain English:** scripted "robot users" visit a web app and an API every 15 minutes,
 report health to live dashboards, and raise an alarm when things degrade. Then — the part
 that makes this a project — the harness **breaks the app on purpose, on a schedule**, to
@@ -10,9 +15,13 @@ measure whether the alarms fire, how fast, and how often they cry wolf.
 > monitoring vendors don't publish: **the monitoring itself gets tested.** Faults are injected
 > on a known timeline, and detection is scored against that ground truth.
 
-**Status: scaffolded.** Probes, metrics pipeline, fault injection and scoring are built,
-unit-tested, and green in CI. Quiet-week baseline collection and the first scored fault runs
-are next. **No measured numbers are claimed yet.**
+**Status — Phase 1 complete, Phase 2 in progress.**
+Phase 1, the harness: probes, metrics pipeline, fault injection and scoring — built,
+unit-tested, green in CI, and verified end to end locally
+([example scorecard](docs/example-scorecard.md)). Phase 2, the measurement campaign: Grafana
+dashboards and burn-rate alerts, a quiet-week false-positive baseline, and full-length scored
+fault runs. Until Phase 2 lands, **no measured numbers are claimed** — the README will carry
+them when they are real.
 
 ## What is being monitored?
 
@@ -41,7 +50,7 @@ application and the same harness monitors that instead.
   caching, artifacts, job summaries, `repository_dispatch` issue automation.
 - **Observability / SRE vocabulary with evidence attached** — Prometheus remote_write (the
   wire protocol, hand-implemented and unit-tested), Grafana Cloud, SLOs, error budgets,
-  multiwindow burn-rate alerting, MTTD, alert precision/recall.
+  multiwindow burn-rate alerting, MTTD (mean time to detect), alert precision/recall.
 - **Playwright beyond test suites** — browser journeys as production probes, the pattern
   behind Checkly and Grafana Synthetic Monitoring's browser checks.
 
@@ -102,7 +111,8 @@ flowchart LR
 ```
 
 Every run is baseline → fault → recovery, so each scorecard contains both a detection test
-and a false-positive test.
+and a false-positive test. [Here is what a scorecard looks like](docs/example-scorecard.md),
+from a compressed local smoke run.
 
 ### The three fault classes
 
@@ -116,7 +126,7 @@ and a false-positive test.
 
 | metric | definition |
 |---|---|
-| **MTTD** per fault class | minutes from injected fault start to detection — probe-level and alert-level, scored separately |
+| **MTTD** (mean time to detect) per fault class | minutes from injected fault start to detection — probe-level and alert-level, scored separately |
 | **Precision / recall** | detection episodes matching an injected fault vs noise; faults that never alerted |
 | **False positives / quiet week** | detection episodes across ≥7 days with no injected faults |
 | **Scheduler jitter** | actual GHA cron delay vs the */15 grid (p50/p95) |
@@ -134,7 +144,7 @@ reported as a second round — never merged silently.
 | `src/slo_harness/` | hand-rolled minimal Prometheus remote_write encoder (unit-tested against an independent decoder), metrics buffer, target registry, Toxiproxy client |
 | `faults/` | `inject.py` (ground-truth timeline), `probe_loop.py` (tight-loop probe), `score.py` (scorecard) |
 | `service/` | toy payments API, reused from [pytest-ai-triage](https://github.com/varunbhatt2193/pytest-ai-triage) — a service written to be broken in known ways; deliberate, disclosed reuse |
-| `.github/actions/playwright-synthetic-probe/` | the composite action every probe goes through; Marketplace-bound |
+| `.github/actions/playwright-synthetic-probe/` | the composite action every probe goes through |
 | `.github/workflows/` | `probe` (cron) · `run-probes` (reusable) · `fault-eval` · `alert-issues` · `build-image` · `ci` |
 
 ## Run it locally

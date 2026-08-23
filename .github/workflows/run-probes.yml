@@ -34,6 +34,11 @@ jobs:
           - target: githubstatus
             kind: api
     steps:
+      # First step, before checkout or any setup: this timestamp is what the cron-jitter
+      # metric measures against, so it must not include job setup time.
+      - name: Capture tick timestamp
+        run: echo "PROBE_TICK_EPOCH=$(date +%s)" >> "$GITHUB_ENV"
+
       - uses: actions/checkout@v4
 
       - name: Run synthetic probe

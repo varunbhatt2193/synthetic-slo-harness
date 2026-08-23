@@ -31,16 +31,27 @@ def test_points_with_same_name_and_labels_group_into_one_series():
     assert by_target["a"].samples == [(1.0, 1000), (2.0, 2000)]
 
 
-def test_cron_jitter_only_recorded_for_cron_source():
-    quiet = MetricsBuffer(source="local")
-    quiet.record_cron_jitter()
-    assert len(quiet) == 0
-
+def test_cron_jitter_uses_workflow_tick_not_probe_start(monkeypatch):
+    # 1787512320 is 47 s past a */15 grid point; the probe itself may start minutes later
+    # (checkout, uv sync, browser install) and must not contaminate the measurement.
+    monkeypatch.setenv("PROBE_TICK_EPOCH", "1787512320")
     cron = MetricsBuffer(source="cron")
     cron.record_cron_jitter()
     (ts,) = cron.to_timeseries()
     assert ts.name == "synthetic_cron_jitter_seconds"
-    assert 0 <= ts.samples[0][0] < 900
+    assert ts.samples[0][0] == 1787512320 % 900
+
+
+def test_cron_jitter_skipped_without_tick_or_for_non_cron(monkeypatch):
+    monkeypatch.setenv("PROBE_TICK_EPOCH", "1787512320")
+    quiet = MetricsBuffer(source="local")
+    quiet.record_cron_jitter()
+    assert len(quiet) == 0
+
+    monkeypatch.delenv("PROBE_TICK_EPOCH")
+    cron = MetricsBuffer(source="cron")
+    cron.record_cron_jitter()
+    assert len(cron) == 0  # no reference timestamp: record nothing, not a wrong number
 
 
 def test_push_skipped_without_credentials(monkeypatch):

@@ -103,7 +103,8 @@ def score(timeline: dict, episodes: list[Episode], alert_firings: list[float] | 
                 break
         alert_mttd = None
         if alert_firings is not None:
-            firing = next((t for t in alert_firings if lo <= t <= hi + grace_s), None)
+            # Same window as probe-level matching: `hi` already includes the grace period.
+            firing = next((t for t in alert_firings if lo <= t <= hi), None)
             alert_mttd = None if firing is None else firing - lo
         rows.append({"fault": window["fault_type"], "start": lo,
                      "probe_mttd_s": probe_mttd, "alert_mttd_s": alert_mttd})

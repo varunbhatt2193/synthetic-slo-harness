@@ -59,6 +59,16 @@ def test_undetected_fault_and_false_positive():
     assert result["false_positive_episodes"] == 1
 
 
+def test_alert_matching_uses_same_grace_window_as_probe_matching():
+    # Regression: grace was once applied twice on the alert side, inflating alert recall.
+    # A firing after window end + grace must not count, even if under end + 2*grace.
+    timeline = {"fault_windows": [{"start": T0, "end": T0 + 300, "fault_type": "error_burst"}]}
+    episodes = [Episode(start=T0 + 40, end=T0 + 280, cycles=10)]
+    firings = [T0 + 300 + 60 + 30]  # 30 s past the single grace period of 60 s
+    result = score(timeline, episodes, alert_firings=firings, grace_s=60)
+    assert result["rows"][0]["alert_mttd_s"] is None
+
+
 def test_alert_mttd_uses_first_firing_in_window():
     fault_start = T0
     timeline = {"fault_windows": [

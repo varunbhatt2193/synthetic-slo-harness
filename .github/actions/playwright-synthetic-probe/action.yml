@@ -2,7 +2,7 @@ name: "Playwright Synthetic Probe"
 description: >-
   Run one synthetic probe — a Playwright browser journey or an HTTP API check — against a named
   target and push availability, latency and per-step timing metrics to a Prometheus remote_write
-  endpoint (e.g. Grafana Cloud). Destined for its own repo + Marketplace listing once stable.
+  endpoint (e.g. Grafana Cloud).
 inputs:
   target:
     description: "Target name from targets.yml"
