@@ -14,6 +14,10 @@ inputs:
     description: "Value for the metric 'source' label (cron | manual | fault-eval | local)"
     required: false
     default: "cron"
+  scheduler:
+    description: "Value for the metric 'scheduler' label (gha | external | manual); cron-jitter metrics are only recorded for 'gha'"
+    required: false
+    default: "gha"
   push-url:
     description: "Prometheus remote_write URL (empty = record JSONL only, skip push)"
     required: false
@@ -54,6 +58,7 @@ runs:
       shell: bash
       env:
         PROBE_SOURCE: ${{ inputs.source }}
+        PROBE_SCHEDULER: ${{ inputs.scheduler }}
         GRAFANA_PUSH_URL: ${{ inputs.push-url }}
         GRAFANA_PUSH_USER: ${{ inputs.push-user }}
         GRAFANA_PUSH_TOKEN: ${{ inputs.push-token }}

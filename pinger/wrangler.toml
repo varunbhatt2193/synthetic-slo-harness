@@ -1,0 +1,9 @@
+name = "synthetic-slo-pinger"
+main = "worker.js"
+compatibility_date = "2026-08-01"
+
+# Same grid as probe.yml's own schedule. When GHA cron does fire, the concurrency group
+# (cancel-in-progress: false) queues the duplicate — both run, availability math is
+# unaffected, and the gha/external scheduler labels keep the two streams separable.
+[triggers]
+crons = ["4,19,34,49 * * * *"]

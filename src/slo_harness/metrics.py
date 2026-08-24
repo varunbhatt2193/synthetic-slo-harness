@@ -30,6 +30,7 @@ ENV_URL = "GRAFANA_PUSH_URL"
 ENV_USER = "GRAFANA_PUSH_USER"
 ENV_TOKEN = "GRAFANA_PUSH_TOKEN"
 ENV_SOURCE = "PROBE_SOURCE"
+ENV_SCHEDULER = "PROBE_SCHEDULER"
 ENV_TICK_EPOCH = "PROBE_TICK_EPOCH"
 
 CRON_PERIOD_S = 15 * 60  # probe.yml runs on a 15-minute grid; jitter is measured against it
@@ -45,12 +46,17 @@ class Point:
 
 
 class MetricsBuffer:
-    def __init__(self, source: str | None = None) -> None:
+    def __init__(self, source: str | None = None, scheduler: str | None = None) -> None:
         self.source = source or os.environ.get(ENV_SOURCE, "local")
+        # Who fired this tick — orthogonal to `source`: dashboards and SLO math key on
+        # source="cron" regardless of scheduler, so probe continuity survives a failover
+        # to an external pinger, while GHA-scheduler evidence stays separable.
+        self.scheduler = scheduler or os.environ.get(ENV_SCHEDULER, "local")
         self._points: list[Point] = []
 
     def gauge(self, name: str, value: float, ts_ms: int | None = None, **labels: str) -> None:
         labels["source"] = self.source
+        labels["scheduler"] = self.scheduler
         self._points.append(
             Point(
                 name=name,
@@ -86,14 +92,20 @@ class MetricsBuffer:
         - synthetic_cron_tick_timestamp_seconds: the raw tick epoch. The gap
           `time() - max(...)` in PromQL is unbounded and catches outright scheduler
           starvation (observed: hours of skipped ticks) — the real detection floor.
+
+        The heartbeat is recorded for every cron-labeled tick regardless of who fired it
+        (it watches the outcome: "probes are ticking"). Jitter is recorded ONLY for
+        scheduler="gha" — an external pinger's punctuality is a different system's, and
+        mixing it in would make the GHA-cron-jitter evidence unfalsifiable.
         """
         tick = os.environ.get(ENV_TICK_EPOCH, "")
         if self.source == "cron" and tick:
-            self.gauge(
-                "synthetic_cron_jitter_seconds",
-                (float(tick) - CRON_OFFSET_S) % CRON_PERIOD_S,
-            )
             self.gauge("synthetic_cron_tick_timestamp_seconds", float(tick))
+            if self.scheduler == "gha":
+                self.gauge(
+                    "synthetic_cron_jitter_seconds",
+                    (float(tick) - CRON_OFFSET_S) % CRON_PERIOD_S,
+                )
 
     def to_timeseries(self) -> list[TimeSeries]:
         grouped: dict[tuple[str, tuple[tuple[str, str], ...]], list[tuple[float, int]]] = {}

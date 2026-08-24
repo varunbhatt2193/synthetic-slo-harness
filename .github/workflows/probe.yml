@@ -31,4 +31,8 @@ jobs:
     uses: ./.github/workflows/run-probes.yml
     with:
       source: ${{ (github.event_name == 'schedule' || inputs.as_cron == true) && 'cron' || 'manual' }}
+      # Provenance, orthogonal to source: `source` keeps SLO continuity across schedulers,
+      # `scheduler` records who actually fired the tick. Jitter evidence is gated on
+      # scheduler=gha so externally-pinged ticks never contaminate the GHA-cron measurements.
+      scheduler: ${{ github.event_name == 'schedule' && 'gha' || (inputs.as_cron == true && 'external' || 'manual') }}
     secrets: inherit

@@ -10,6 +10,10 @@ on:
         description: "source label for pushed metrics"
         type: string
         default: "cron"
+      scheduler:
+        description: "scheduler label for pushed metrics: gha | external | manual"
+        type: string
+        default: "gha"
     secrets:
       GRAFANA_PUSH_URL:
         required: false
@@ -47,6 +51,7 @@ jobs:
           target: ${{ matrix.target }}
           kind: ${{ matrix.kind }}
           source: ${{ inputs.source }}
+          scheduler: ${{ inputs.scheduler }}
           push-url: ${{ secrets.GRAFANA_PUSH_URL }}
           push-user: ${{ secrets.GRAFANA_PUSH_USER }}
           push-token: ${{ secrets.GRAFANA_PUSH_TOKEN }}

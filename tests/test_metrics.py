@@ -12,7 +12,7 @@ def test_record_probe_emits_success_duration_and_steps():
     series = {ts.name: ts for ts in buffer.to_timeseries()}
     assert series["synthetic_probe_success"].samples[0][0] == 1.0
     assert series["synthetic_probe_success"].labels == {
-        "target": "saucedemo", "probe": "journey", "source": "test",
+        "target": "saucedemo", "probe": "journey", "source": "test", "scheduler": "local",
     }
     assert series["synthetic_probe_duration_seconds"].samples[0][0] == 3.2
     step_series = [ts for ts in buffer.to_timeseries()
@@ -35,13 +35,25 @@ def test_cron_jitter_uses_workflow_tick_not_probe_start(monkeypatch):
     # 1787512320 is 8 min past a :04-offset grid point; the probe itself may start minutes
     # later (checkout, uv sync, browser install) and must not contaminate the measurement.
     monkeypatch.setenv("PROBE_TICK_EPOCH", "1787512320")
-    cron = MetricsBuffer(source="cron")
+    cron = MetricsBuffer(source="cron", scheduler="gha")
     cron.record_cron_jitter()
     by_name = {ts.name: ts for ts in cron.to_timeseries()}
     assert by_name["synthetic_cron_jitter_seconds"].samples[0][0] == (1787512320 - 240) % 900
     # The mod-period jitter above is capped at 899 s and cannot see skipped ticks; the raw
     # tick epoch is what makes multi-hour scheduler starvation measurable as a PromQL gap.
     assert by_name["synthetic_cron_tick_timestamp_seconds"].samples[0][0] == 1787512320
+
+
+def test_external_scheduler_records_heartbeat_but_not_jitter(monkeypatch):
+    # An external pinger keeps the SLO series alive (source="cron") and feeds the heartbeat,
+    # but its punctuality is not GHA's — recording jitter for it would corrupt the evidence.
+    monkeypatch.setenv("PROBE_TICK_EPOCH", "1787512320")
+    pinged = MetricsBuffer(source="cron", scheduler="external")
+    pinged.record_cron_jitter()
+    by_name = {ts.name: ts for ts in pinged.to_timeseries()}
+    assert "synthetic_cron_jitter_seconds" not in by_name
+    assert by_name["synthetic_cron_tick_timestamp_seconds"].samples[0][0] == 1787512320
+    assert by_name["synthetic_cron_tick_timestamp_seconds"].labels["scheduler"] == "external"
 
 
 def test_cron_jitter_skipped_without_tick_or_for_non_cron(monkeypatch):
@@ -71,5 +83,6 @@ def test_dump_jsonl(tmp_path):
     buffer.dump_jsonl(out)
     (line,) = out.read_text().splitlines()
     assert json.loads(line) == {
-        "name": "m", "labels": {"source": "test", "target": "a"}, "value": 1.5, "ts_ms": 1234,
+        "name": "m", "labels": {"scheduler": "local", "source": "test", "target": "a"},
+        "value": 1.5, "ts_ms": 1234,
     }
