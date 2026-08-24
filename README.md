@@ -5,8 +5,9 @@
 
 `Playwright` · `Python` · `pytest` · `GitHub Actions` · `Docker` · `Prometheus` · `Grafana` · `SLOs / burn-rate alerting` · `Toxiproxy` · `httpx` · `FastAPI`
 
-**In plain English:** scripted "robot users" visit a web app and an API every 15 minutes,
-report health to live dashboards, and raise an alarm when things degrade. Then — the part
+**In plain English:** every 15 minutes a *synthetic user* — a script driving a real browser,
+acting like a customer — visits a web app and an API, reports health to live dashboards, and
+raises an alarm when things degrade. Then — the part
 that makes this a project — the harness **breaks the app on purpose, on a schedule**, to
 measure whether the alarms fire, how fast, and how often they cry wolf.
 
@@ -68,7 +69,7 @@ application and the same harness monitors that instead.
 
 | tool | what it is | its job here |
 |---|---|---|
-| **Playwright** | a library that drives a real web browser from code | plays the "robot user": opens the store site, logs in, adds an item to the cart, reaches checkout — and reports whether each step worked and how long it took |
+| **Playwright** | a library that drives a real web browser from code | plays the synthetic user: opens the store site, logs in, adds an item to the cart, reaches checkout — and reports whether each step worked and how long it took |
 | **pytest** | Python's standard test runner | every probe is written as a test; pytest runs it, times each step, and decides pass/fail |
 | **httpx** | a Python HTTP client | makes the API-probe requests, and delivers the metrics to Grafana |
 | **GitHub Actions** | GitHub's built-in automation service (usually used for CI) | the scheduler *and* the servers: wakes up every 15 minutes, runs the probes on a fresh machine, and hosts the entire fault experiment — no server of our own, no hosting bill |
