@@ -9,6 +9,13 @@ on:
     # grid, shifted by 4 min — keep CRON_OFFSET_S in src/slo_harness/metrics.py in sync.
     - cron: "4,19,34,49 * * * *"
   workflow_dispatch:
+    inputs:
+      as_cron:
+        description: >-
+          Set by an external scheduler pinging this workflow on the same 15-min grid when
+          GHA cron is starved; labels metrics source=cron instead of source=manual.
+        type: boolean
+        default: false
 
 # Never let a slow run overlap the next tick; queue instead of cancel so gaps in the
 # availability series mean "target was slow", not "we discarded the run".
@@ -23,5 +30,5 @@ jobs:
   probes:
     uses: ./.github/workflows/run-probes.yml
     with:
-      source: ${{ github.event_name == 'schedule' && 'cron' || 'manual' }}
+      source: ${{ (github.event_name == 'schedule' || inputs.as_cron == true) && 'cron' || 'manual' }}
     secrets: inherit
