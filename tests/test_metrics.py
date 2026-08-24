@@ -37,9 +37,11 @@ def test_cron_jitter_uses_workflow_tick_not_probe_start(monkeypatch):
     monkeypatch.setenv("PROBE_TICK_EPOCH", "1787512320")
     cron = MetricsBuffer(source="cron")
     cron.record_cron_jitter()
-    (ts,) = cron.to_timeseries()
-    assert ts.name == "synthetic_cron_jitter_seconds"
-    assert ts.samples[0][0] == (1787512320 - 240) % 900
+    by_name = {ts.name: ts for ts in cron.to_timeseries()}
+    assert by_name["synthetic_cron_jitter_seconds"].samples[0][0] == (1787512320 - 240) % 900
+    # The mod-period jitter above is capped at 899 s and cannot see skipped ticks; the raw
+    # tick epoch is what makes multi-hour scheduler starvation measurable as a PromQL gap.
+    assert by_name["synthetic_cron_tick_timestamp_seconds"].samples[0][0] == 1787512320
 
 
 def test_cron_jitter_skipped_without_tick_or_for_non_cron(monkeypatch):

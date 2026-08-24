@@ -1,17 +1,62 @@
 {
   "rules": [
     {
+      "uid": "slo-probe-heartbeat",
+      "title": "Cron probe heartbeat lost — scheduler starvation or pipeline break",
+      "ruleGroup": "slo-burn",
+      "folderUID": "__FOLDER_UID__",
+      "condition": "B",
+      "for": "5m",
+      "noDataState": "Alerting",
+      "execErrState": "Error",
+      "labels": { "severity": "page", "slo": "probe-availability-99" },
+      "annotations": {
+        "summary": "No cron-scheduled probe tick for {{ $values.B }} seconds (threshold 2400s = 2+ missed 15-min ticks). Burn-rate rules cannot see this failure mode — no data evaluates as OK there by design; this rule is the watchdog for the watchdog. Observed cause 2026-08-24: GitHub Actions silently skipping schedule events for hours.",
+        "runbook": "https://github.com/varunbhatt2193/synthetic-slo-harness/blob/main/grafana/README.md"
+      },
+      "data": [
+        {
+          "refId": "A",
+          "relativeTimeRange": { "from": 86400, "to": 0 },
+          "datasourceUid": "__PROM_DS_UID__",
+          "model": {
+            "refId": "A",
+            "instant": true,
+            "expr": "time() - max(max_over_time(synthetic_cron_tick_timestamp_seconds[24h]))"
+          }
+        },
+        {
+          "refId": "B",
+          "relativeTimeRange": { "from": 0, "to": 0 },
+          "datasourceUid": "__expr__",
+          "model": {
+            "refId": "B",
+            "type": "threshold",
+            "expression": "A",
+            "conditions": [
+              {
+                "evaluator": { "type": "gt", "params": [2400] },
+                "operator": { "type": "and" },
+                "query": { "params": ["A"] },
+                "reducer": { "type": "last" }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
       "uid": "slo-fast-burn",
       "title": "SLO fast burn — cron probes",
       "ruleGroup": "slo-burn",
       "folderUID": "__FOLDER_UID__",
       "condition": "B",
-      "for": "0s",
+      "for": "10m",
       "noDataState": "OK",
       "execErrState": "Error",
       "labels": { "severity": "page", "slo": "probe-availability-99" },
       "annotations": {
-        "summary": "Fast error-budget burn for target {{ $labels.target }}: 1h burn rate {{ $values.B }}x (threshold 14.4x, gated by the 30m window)",
+        "summary": "Fast error-budget burn for target {{ $labels.target }}: 2h burn rate {{ $values.B }}x (threshold 14.4x, gated by the 30m window). Long window is 2h, not the SRE-book 1h: at a 15-min probe cadence a 1h window holds 4 samples and a single flake would page.",
         "runbook": "https://github.com/varunbhatt2193/synthetic-slo-harness/blob/main/grafana/README.md"
       },
       "data": [
@@ -22,7 +67,7 @@
           "model": {
             "refId": "A",
             "instant": true,
-            "expr": "((1 - avg by (target) (avg_over_time(synthetic_probe_success{source=\"cron\"}[1h]))) / 0.01) and ((1 - avg by (target) (avg_over_time(synthetic_probe_success{source=\"cron\"}[30m]))) / 0.01 > 14.4)"
+            "expr": "((1 - avg by (target) (avg_over_time(synthetic_probe_success{source=\"cron\"}[2h]))) / 0.01) and ((1 - avg by (target) (avg_over_time(synthetic_probe_success{source=\"cron\"}[30m]))) / 0.01 > 14.4)"
           }
         },
         {
@@ -51,7 +96,7 @@
       "ruleGroup": "slo-burn",
       "folderUID": "__FOLDER_UID__",
       "condition": "B",
-      "for": "0s",
+      "for": "10m",
       "noDataState": "OK",
       "execErrState": "Error",
       "labels": { "severity": "ticket", "slo": "probe-availability-99" },

@@ -149,7 +149,7 @@ from a compressed local smoke run.
 | **MTTD** (mean time to detect) per fault class | minutes from injected fault start to detection — probe-level and alert-level, scored separately |
 | **Precision / recall** | detection episodes matching an injected fault vs noise; faults that never alerted |
 | **False positives / quiet week** | detection episodes across ≥7 days with no injected faults |
-| **Scheduler jitter** | actual GHA cron delay vs the 15-minute schedule grid (p50/p95) |
+| **Scheduler jitter & starvation** | per-tick delay vs the 15-minute schedule grid (p50/p95), plus the gap since the last delivered tick — the latter catches the failure mode where GitHub skips ticks entirely |
 | **Probe-suite health** | flake rate and duration trend of the probes themselves |
 
 The detection rule is frozen in `faults/score.py` (≥2 consecutive breaching cycles; a cycle
@@ -199,12 +199,16 @@ alert-level scoring credentials — is documented step-by-step in
 
 ## Limits — read before quoting numbers
 
-- **GHA cron is best-effort.** Firing can slip minutes — and at the popular `:00/:15/:30/:45`
-  marks GitHub sheds load outright (observed here: a multi-hour skip streak around UTC
-  midnight), which is why the schedule runs on offset minutes (`:04/:19/:34/:49`). The
-  remaining jitter is measured and published rather than hidden; it is the detection floor of
-  the cron path. Needing sub-minute detection is exactly the line where you buy Checkly or
-  Grafana Synthetic Monitoring instead.
+- **GHA cron is best-effort — and can starve outright.** Measured on this repo's first night
+  (2026-08-24): 3 scheduled fires delivered where a `*/15` schedule should have produced ~28,
+  inter-fire gaps of ~53–57 minutes, then a multi-hour stretch of zero fires — while
+  manually-dispatched runs of the same workflow completed in about a minute and GitHub's
+  status page stayed green. Moving the schedule to offset minutes (`:04/:19/:34/:49`) did not
+  change delivery, so the mechanism is unconfirmed; the observation, not a cause, is what
+  this repo claims. The gap since the last delivered tick — not per-tick jitter — is
+  therefore the true detection floor of the cron path, and it is measured, alerted on, and
+  published rather than hidden. Needing reliable sub-minute detection is exactly the line
+  where you buy Checkly or Grafana Synthetic Monitoring instead.
 - Single region (GitHub-hosted runners). No geographic diversity.
 - Grafana Cloud free tier keeps 14 days of metrics — quiet-week analysis must run inside that
   window.

@@ -72,12 +72,20 @@ class MetricsBuffer:
             )
 
     def record_cron_jitter(self) -> None:
-        """Seconds from the last scheduled grid point (:04/:19/:34/:49) to the job's first step.
+        """Record cron-tick health: per-tick phase offset AND an unbounded heartbeat.
 
         The reference timestamp is PROBE_TICK_EPOCH, captured by the workflow's very first
         step — before checkout, dependency sync, and browser install — so this measures
         scheduler + queue delay, not job setup time. Without that env var (probes started
-        some other way), no jitter is recorded rather than a contaminated value.
+        some other way), nothing is recorded rather than a contaminated value.
+
+        Two gauges, because they observe different failure modes:
+        - synthetic_cron_jitter_seconds: seconds past the scheduled grid point
+          (:04/:19/:34/:49). Mod-period, so it is capped at 899 s by construction — a
+          punctuality stat for ticks that DID fire, blind to ticks that never fired.
+        - synthetic_cron_tick_timestamp_seconds: the raw tick epoch. The gap
+          `time() - max(...)` in PromQL is unbounded and catches outright scheduler
+          starvation (observed: hours of skipped ticks) — the real detection floor.
         """
         tick = os.environ.get(ENV_TICK_EPOCH, "")
         if self.source == "cron" and tick:
@@ -85,6 +93,7 @@ class MetricsBuffer:
                 "synthetic_cron_jitter_seconds",
                 (float(tick) - CRON_OFFSET_S) % CRON_PERIOD_S,
             )
+            self.gauge("synthetic_cron_tick_timestamp_seconds", float(tick))
 
     def to_timeseries(self) -> list[TimeSeries]:
         grouped: dict[tuple[str, tuple[tuple[str, str], ...]], list[tuple[float, int]]] = {}
