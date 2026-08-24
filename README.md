@@ -64,6 +64,25 @@ application and the same harness monitors that instead.
    scorecard: time-to-detect per fault class, alert precision and recall, false positives per
    quiet week.
 
+## What each tool does (plain English)
+
+| tool | what it is | its job here |
+|---|---|---|
+| **Playwright** | a library that drives a real web browser from code | plays the "robot user": opens the store site, logs in, adds an item to the cart, reaches checkout — and reports whether each step worked and how long it took |
+| **pytest** | Python's standard test runner | every probe is written as a test; pytest runs it, times each step, and decides pass/fail |
+| **httpx** | a Python HTTP client | makes the API-probe requests, and delivers the metrics to Grafana |
+| **GitHub Actions** | GitHub's built-in automation service (usually used for CI) | the scheduler *and* the servers: wakes up every 15 minutes, runs the probes on a fresh machine, and hosts the entire fault experiment — no server of our own, no hosting bill |
+| **Prometheus** | the industry-standard format and database for metrics — named numbers recorded over time | every probe result becomes a metric like `synthetic_probe_success = 1` or `synthetic_probe_duration_seconds = 2.3`; this repo implements Prometheus's `remote_write` wire format by hand to send them |
+| **Grafana Cloud** | a hosted (free-tier) service that stores Prometheus metrics, draws dashboards, and evaluates alert rules | the mission control: shows availability, error budget, and burn rate on a live dashboard, and fires the alerts when the error budget burns too fast |
+| **Toxiproxy** | a small proxy from Shopify built for breaking network connections *on purpose* | the fault injector: it sits in the traffic path (probe → API, and API → database) and, on command, adds latency, cuts the database link, or refuses connections entirely |
+| **Toy payments API** (FastAPI + Postgres) | a tiny web service and database that live in this repo | the crash-test dummy: the app we deliberately break on a known schedule, so detection speed can be scored against ground truth |
+| **Docker** (service containers) | packaging that runs software in throwaway containers | boots the whole breakable stack — API, database, Toxiproxy — inside a single GitHub Actions job, and throws it away afterwards |
+
+How they fit together: **GitHub Actions** wakes up → **pytest** runs **Playwright**/**httpx**
+probes → results are pushed as **Prometheus** metrics into **Grafana Cloud**, whose dashboards
+and alert rules watch them. During a fault evaluation, **Docker** boots the **toy API** inside
+the job and **Toxiproxy** breaks it on a timeline the scorer knows about.
+
 ## How the continuous monitoring works
 
 ```mermaid
