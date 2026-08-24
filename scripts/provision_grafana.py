@@ -65,7 +65,7 @@ def main() -> None:
 
     # 2. Folder.
     response = client.post("/api/folders", json={"uid": FOLDER_UID, "title": FOLDER_TITLE})
-    if response.status_code == 409:
+    if response.status_code in (409, 412):  # Grafana signals "already exists" with either
         print(f"folder {FOLDER_UID}: already exists")
     else:
         response.raise_for_status()
