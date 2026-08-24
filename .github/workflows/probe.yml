@@ -4,7 +4,10 @@ name: probe
 
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    # Offset minutes, not */15: GitHub sheds cron load at the popular :00/:15/:30/:45
+    # marks (observed here as multi-hour skip streaks around UTC midnight). Same 15-min
+    # grid, shifted by 4 min — keep CRON_OFFSET_S in src/slo_harness/metrics.py in sync.
+    - cron: "4,19,34,49 * * * *"
   workflow_dispatch:
 
 # Never let a slow run overlap the next tick; queue instead of cancel so gaps in the

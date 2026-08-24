@@ -32,7 +32,8 @@ ENV_TOKEN = "GRAFANA_PUSH_TOKEN"
 ENV_SOURCE = "PROBE_SOURCE"
 ENV_TICK_EPOCH = "PROBE_TICK_EPOCH"
 
-CRON_PERIOD_S = 15 * 60  # probe.yml runs `*/15`; jitter is measured against that grid
+CRON_PERIOD_S = 15 * 60  # probe.yml runs on a 15-minute grid; jitter is measured against it
+CRON_OFFSET_S = 4 * 60  # the grid is shifted to :04/:19/:34/:49 — see probe.yml's schedule
 
 
 @dataclass(frozen=True)
@@ -71,7 +72,7 @@ class MetricsBuffer:
             )
 
     def record_cron_jitter(self) -> None:
-        """Seconds from the last */15 grid point to the job's first step.
+        """Seconds from the last scheduled grid point (:04/:19/:34/:49) to the job's first step.
 
         The reference timestamp is PROBE_TICK_EPOCH, captured by the workflow's very first
         step — before checkout, dependency sync, and browser install — so this measures
@@ -80,7 +81,10 @@ class MetricsBuffer:
         """
         tick = os.environ.get(ENV_TICK_EPOCH, "")
         if self.source == "cron" and tick:
-            self.gauge("synthetic_cron_jitter_seconds", float(tick) % CRON_PERIOD_S)
+            self.gauge(
+                "synthetic_cron_jitter_seconds",
+                (float(tick) - CRON_OFFSET_S) % CRON_PERIOD_S,
+            )
 
     def to_timeseries(self) -> list[TimeSeries]:
         grouped: dict[tuple[str, tuple[tuple[str, str], ...]], list[tuple[float, int]]] = {}

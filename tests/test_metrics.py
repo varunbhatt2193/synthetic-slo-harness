@@ -32,14 +32,14 @@ def test_points_with_same_name_and_labels_group_into_one_series():
 
 
 def test_cron_jitter_uses_workflow_tick_not_probe_start(monkeypatch):
-    # 1787512320 is 47 s past a */15 grid point; the probe itself may start minutes later
-    # (checkout, uv sync, browser install) and must not contaminate the measurement.
+    # 1787512320 is 8 min past a :04-offset grid point; the probe itself may start minutes
+    # later (checkout, uv sync, browser install) and must not contaminate the measurement.
     monkeypatch.setenv("PROBE_TICK_EPOCH", "1787512320")
     cron = MetricsBuffer(source="cron")
     cron.record_cron_jitter()
     (ts,) = cron.to_timeseries()
     assert ts.name == "synthetic_cron_jitter_seconds"
-    assert ts.samples[0][0] == 1787512320 % 900
+    assert ts.samples[0][0] == (1787512320 - 240) % 900
 
 
 def test_cron_jitter_skipped_without_tick_or_for_non_cron(monkeypatch):

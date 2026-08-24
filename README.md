@@ -89,7 +89,7 @@ the job and **Toxiproxy** breaks it on a timeline the scorer knows about.
 ```mermaid
 flowchart LR
     subgraph gha["GitHub Actions"]
-        cron(["cron */15"]) --> probes["probe matrix<br/>Playwright journey · API check"]
+        cron(["cron every 15 min"]) --> probes["probe matrix<br/>Playwright journey · API check"]
     end
     probes -- "remote_write" --> prom[("Grafana Cloud<br/>Prometheus")]
     prom --> dash["SLO dashboards<br/>error budget · burn rate"]
@@ -149,7 +149,7 @@ from a compressed local smoke run.
 | **MTTD** (mean time to detect) per fault class | minutes from injected fault start to detection — probe-level and alert-level, scored separately |
 | **Precision / recall** | detection episodes matching an injected fault vs noise; faults that never alerted |
 | **False positives / quiet week** | detection episodes across ≥7 days with no injected faults |
-| **Scheduler jitter** | actual GHA cron delay vs the */15 grid (p50/p95) |
+| **Scheduler jitter** | actual GHA cron delay vs the 15-minute schedule grid (p50/p95) |
 | **Probe-suite health** | flake rate and duration trend of the probes themselves |
 
 The detection rule is frozen in `faults/score.py` (≥2 consecutive breaching cycles; a cycle
@@ -199,9 +199,12 @@ alert-level scoring credentials — is documented step-by-step in
 
 ## Limits — read before quoting numbers
 
-- **GHA cron is best-effort.** Firing can slip minutes. That jitter is measured and published
-  rather than hidden; it is the detection floor of the cron path. Needing sub-minute detection
-  is exactly the line where you buy Checkly or Grafana Synthetic Monitoring instead.
+- **GHA cron is best-effort.** Firing can slip minutes — and at the popular `:00/:15/:30/:45`
+  marks GitHub sheds load outright (observed here: a multi-hour skip streak around UTC
+  midnight), which is why the schedule runs on offset minutes (`:04/:19/:34/:49`). The
+  remaining jitter is measured and published rather than hidden; it is the detection floor of
+  the cron path. Needing sub-minute detection is exactly the line where you buy Checkly or
+  Grafana Synthetic Monitoring instead.
 - Single region (GitHub-hosted runners). No geographic diversity.
 - Grafana Cloud free tier keeps 14 days of metrics — quiet-week analysis must run inside that
   window.
